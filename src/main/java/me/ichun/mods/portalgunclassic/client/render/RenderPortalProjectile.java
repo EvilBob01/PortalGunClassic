@@ -1,10 +1,10 @@
 package me.ichun.mods.portalgunclassic.client.render;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import me.ichun.mods.portalgunclassic.common.entity.EntityPortalProjectile;
+import me.ichun.mods.portalgunclassic.common.item.ItemPortalGun;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -16,7 +16,6 @@ import org.joml.Matrix4f;
 
 public class RenderPortalProjectile extends EntityRenderer<EntityPortalProjectile>
 {
-    // Single base texture — tinted at render time with dye color
     public static final ResourceLocation TX_BASE = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/entity/portalball_blue.png");
 
     public RenderPortalProjectile(EntityRendererProvider.Context ctx) { super(ctx); }
@@ -27,10 +26,9 @@ public class RenderPortalProjectile extends EntityRenderer<EntityPortalProjectil
     {
         if (entity.age < 1) return;
 
-        // Determine tint from color index + slot (slot B is darker tint)
         DyeColor dye = DyeColor.byId(entity.getColorIndex());
-        float[] c    = dye.getTextureDiffuseColors();
-        float dim    = entity.getSlot().equals("b") ? 0.65f : 1.0f;
+        float[]  c   = ItemPortalGun.dyeRGB(dye);
+        float    dim = entity.getSlot().equals("b") ? 0.65f : 1.0f;
         int r = (int)(c[0] * 255 * dim);
         int g = (int)(c[1] * 255 * dim);
         int b = (int)(c[2] * 255 * dim);

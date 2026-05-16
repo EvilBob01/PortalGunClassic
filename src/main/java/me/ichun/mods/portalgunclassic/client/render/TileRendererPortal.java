@@ -2,6 +2,7 @@ package me.ichun.mods.portalgunclassic.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import me.ichun.mods.portalgunclassic.common.item.ItemPortalGun;
 import me.ichun.mods.portalgunclassic.common.tileentity.TileEntityPortal;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -14,7 +15,6 @@ import org.joml.Matrix4f;
 
 public class TileRendererPortal implements BlockEntityRenderer<TileEntityPortal>
 {
-    // Single set of textures — tinted at render time with dye color
     public static final ResourceLocation TX_BTM   = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/blocks/blue_bottom.png");
     public static final ResourceLocation TX_TOP   = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/blocks/blue_top.png");
     public static final ResourceLocation TX_FLOOR = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/blocks/blue_floor.png");
@@ -27,10 +27,9 @@ public class TileRendererPortal implements BlockEntityRenderer<TileEntityPortal>
     {
         if (!be.setup) return;
 
-        // Tint by color index: slot A = full brightness, slot B = darker
         DyeColor dye = DyeColor.byId(be.colorIndex);
-        float[] c    = dye.getTextureDiffuseColors();
-        float dim    = (be.slot != null && be.slot.equals("b")) ? 0.65f : 1.0f;
+        float[]  c   = ItemPortalGun.dyeRGB(dye);
+        float    dim = (be.slot != null && be.slot.equals("b")) ? 0.65f : 1.0f;
         int r = (int)(c[0] * 255 * dim);
         int g = (int)(c[1] * 255 * dim);
         int b = (int)(c[2] * 255 * dim);

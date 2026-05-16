@@ -15,21 +15,19 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
+import net.minecraft.util.FastColor;
 
 import java.util.List;
 
 public class ItemPortalGun extends Item
 {
-    // NBT keys
-    public static final String NBT_COLOR = "portalColor"; // 0-15 DyeColor ordinal
-    public static final int DEFAULT_COLOR = DyeColor.CYAN.getId(); // default = cyan
+    public static final String NBT_COLOR   = "portalColor";
+    public static final int    DEFAULT_COLOR = DyeColor.CYAN.getId();
 
     public ItemPortalGun()
     {
         super(new Item.Properties().stacksTo(1));
     }
-
-    // ── Color helpers ────────────────────────────────────────────────────────
 
     public static int getColorIndex(ItemStack stack)
     {
@@ -48,25 +46,28 @@ public class ItemPortalGun extends Item
         return DyeColor.byId(getColorIndex(stack));
     }
 
-    /** Returns the ARGB tint color for rendering based on the dye color */
+    /** Returns the ARGB tint for item rendering */
     public static int getRenderColor(ItemStack stack)
     {
-        DyeColor dye = getDyeColor(stack);
-        float[] c = dye.getTextureDiffuseColors();
-        int r = (int)(c[0] * 255);
-        int g = (int)(c[1] * 255);
-        int b = (int)(c[2] * 255);
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
+        return FastColor.ARGB32.opaque(getDyeColor(stack).getTextureDiffuseColor());
     }
 
-    // ── Use actions ──────────────────────────────────────────────────────────
+    /** Returns float[3] RGB (0-1) from a DyeColor for vertex tinting */
+    public static float[] dyeRGB(DyeColor dye)
+    {
+        int argb = dye.getTextureDiffuseColor();
+        return new float[]{
+            FastColor.ARGB32.red(argb)   / 255f,
+            FastColor.ARGB32.green(argb) / 255f,
+            FastColor.ARGB32.blue(argb)  / 255f
+        };
+    }
 
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand)
     {
         ItemStack stack = player.getItemInHand(hand);
 
-        // Sneak + right-click with dye in offhand = recolor the gun
         if (player.isShiftKeyDown())
         {
             ItemStack offhand = player.getOffhandItem();
@@ -96,27 +97,21 @@ public class ItemPortalGun extends Item
                 data.killForPlayer(level, player.getUUID(), colorIdx, "b");
                 level.playSound(null, player.getX(), player.getEyeY(), player.getZ(),
                     SoundRegistry.RESET.get(), SoundSource.PLAYERS, 0.3F, 1.0F);
-                player.displayClientMessage(
-                    Component.literal("Portals reset"), true);
+                player.displayClientMessage(Component.literal("Portals reset"), true);
             }
             return InteractionResultHolder.success(stack);
         }
 
         // Right-click = fire slot B
         if (!level.isClientSide)
-        {
             firePortal(level, player, stack, "b");
-        }
         return InteractionResultHolder.success(stack);
     }
 
-    /** Left-click attack = fire slot A (via event handler, not use()) */
     public void fireSlotA(Level level, Player player, ItemStack stack)
     {
         if (!level.isClientSide)
-        {
             firePortal(level, player, stack, "a");
-        }
     }
 
     private void firePortal(Level level, Player player, ItemStack stack, String slot)

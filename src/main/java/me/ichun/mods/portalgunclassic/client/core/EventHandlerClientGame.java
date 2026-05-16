@@ -75,7 +75,7 @@ public class EventHandlerClientGame
         boolean bActive = (bits & 2) != 0;
 
         DyeColor dye = DyeColor.byId(heldColor);
-        float[] c    = dye.getTextureDiffuseColors();
+        float[] c    = ItemPortalGun.dyeRGB(dye);
 
         // Slot A — tinted with dye color
         RenderSystem.setShaderColor(c[0], c[1], c[2], 1f);
