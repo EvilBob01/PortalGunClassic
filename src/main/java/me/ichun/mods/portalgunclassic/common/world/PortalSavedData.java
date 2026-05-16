@@ -2,7 +2,12 @@ package me.ichun.mods.portalgunclassic.common.world;
 
 import me.ichun.mods.portalgunclassic.common.packet.PacketPortalStatus;
 import me.ichun.mods.portalgunclassic.common.portal.PortalInfo;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -10,82 +15,96 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class PortalSavedData extends SavedData
 {
     public static final String DATA_ID = "PortalGunClassicSaveData";
 
-    // Keyed by dimension ResourceKey location string
-    public HashMap<ResourceKey<Level>, HashMap<String, PortalInfo>> portalInfo = new HashMap<>();
+    /**
+     * Flat map: key = "ownerUUID:colorIndex:slot"  →  PortalInfo
+     * Portals from different players/colors/slots never interact.
+     */
+    public final HashMap<String, PortalInfo> portals = new HashMap<>();
 
     public PortalSavedData() {}
 
     public static PortalSavedData getOrCreate(Level level)
     {
         return level.getServer().overworld().getDataStorage()
-            .computeIfAbsent(new SavedData.Factory<PortalSavedData>(PortalSavedData::new, PortalSavedData::load, DataFixTypes.LEVEL), DATA_ID);
+            .computeIfAbsent(new SavedData.Factory<PortalSavedData>(
+                PortalSavedData::new, PortalSavedData::load, DataFixTypes.LEVEL), DATA_ID);
     }
 
-    public void set(Level world, boolean orange, BlockPos pos)
+    // ── Mutation ─────────────────────────────────────────────────────────────
+
+    public void set(Level world, UUID owner, int colorIndex, String slot, BlockPos pos)
     {
-        HashMap<String, PortalInfo> map = portalInfo.computeIfAbsent(world.dimension(), k -> new HashMap<>());
-        map.put(orange ? "orange" : "blue", new PortalInfo(orange, pos));
+        String key = PortalInfo.makeKey(owner, colorIndex, slot);
+        portals.put(key, new PortalInfo(owner, colorIndex, slot, pos));
         setDirty();
-        broadcast(world, map);
+        sendStatusToPlayer(world, owner);
     }
 
-    public void kill(Level world, boolean orange)
+    public void killForPlayer(Level world, UUID owner, int colorIndex, String slot)
     {
-        HashMap<String, PortalInfo> map = portalInfo.get(world.dimension());
-        if (map != null)
+        String key = PortalInfo.makeKey(owner, colorIndex, slot);
+        PortalInfo info = portals.remove(key);
+        if (info != null)
         {
-            PortalInfo info = map.get(orange ? "orange" : "blue");
-            if (info != null)
-            {
-                info.kill(world);
-                map.remove(orange ? "orange" : "blue");
-                if (map.isEmpty()) portalInfo.remove(world.dimension());
-                setDirty();
-            }
-            broadcast(world, map);
+            info.kill(world);
+            setDirty();
         }
+        sendStatusToPlayer(world, owner);
     }
 
-    private void broadcast(Level world, HashMap<String, PortalInfo> map)
+    /** Returns the paired portal for a given portal (same owner+color, opposite slot), or null */
+    public PortalInfo getPair(UUID owner, int colorIndex, String slot)
     {
-        PacketPortalStatus packet = new PacketPortalStatus(
-            map != null && map.containsKey("blue"),
-            map != null && map.containsKey("orange"));
-
-        for (ServerPlayer player : ((ServerLevel) world).players())
-        {
-            PacketDistributor.sendToPlayer(player, packet);
-        }
+        return portals.get(PortalInfo.pairKey(owner, colorIndex, slot));
     }
+
+    // ── Networking ───────────────────────────────────────────────────────────
+
+    /**
+     * Sends the current portal status for a specific player to that player.
+     * Status = per-colorIndex bitmask: bit 0 = slot A active, bit 1 = slot B active
+     */
+    public void sendStatusToPlayer(Level world, UUID ownerUUID)
+    {
+        if (!(world instanceof ServerLevel serverLevel)) return;
+        ServerPlayer target = serverLevel.getServer().getPlayerList().getPlayer(ownerUUID);
+        if (target == null) return;
+
+        Map<Integer, Integer> statusMap = buildStatusMap(ownerUUID);
+        PacketDistributor.sendToPlayer(target, new PacketPortalStatus(ownerUUID, statusMap));
+    }
+
+    public Map<Integer, Integer> buildStatusMap(UUID ownerUUID)
+    {
+        Map<Integer, Integer> map = new HashMap<>();
+        for (PortalInfo info : portals.values())
+        {
+            if (!info.ownerUUID.equals(ownerUUID)) continue;
+            int bits = map.getOrDefault(info.colorIndex, 0);
+            bits |= info.slot.equals("a") ? 1 : 2;
+            map.put(info.colorIndex, bits);
+        }
+        return map;
+    }
+
+    // ── Serialisation ────────────────────────────────────────────────────────
 
     public static PortalSavedData load(CompoundTag tag, HolderLookup.Provider provider)
     {
         PortalSavedData data = new PortalSavedData();
-        int count = tag.getInt("dimCount");
-        for (int i = 0; i < count; i++)
+        ListTag list = tag.getList("portals", Tag.TAG_COMPOUND);
+        for (int i = 0; i < list.size(); i++)
         {
-            CompoundTag dimTag = tag.getCompound("dim" + i);
-            HashMap<String, PortalInfo> map = new HashMap<>();
-            if (dimTag.contains("blue"))   map.put("blue",   PortalInfo.createFromNBT(dimTag.getCompound("blue")));
-            if (dimTag.contains("orange")) map.put("orange", PortalInfo.createFromNBT(dimTag.getCompound("orange")));
-            if (!map.isEmpty())
-            {
-                ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION,
-                    ResourceLocation.parse(dimTag.getString("dim")));
-                data.portalInfo.put(key, map);
-            }
+            PortalInfo info = PortalInfo.createFromNBT(list.getCompound(i));
+            data.portals.put(info.key(), info);
         }
         return data;
     }
@@ -93,17 +112,10 @@ public class PortalSavedData extends SavedData
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider)
     {
-        tag.putInt("dimCount", portalInfo.size());
-        int i = 0;
-        for (Map.Entry<ResourceKey<Level>, HashMap<String, PortalInfo>> e : portalInfo.entrySet())
-        {
-            CompoundTag dimTag = new CompoundTag();
-            dimTag.putString("dim", e.getKey().location().toString());
-            if (e.getValue().containsKey("blue"))   dimTag.put("blue",   e.getValue().get("blue").toNBT());
-            if (e.getValue().containsKey("orange")) dimTag.put("orange", e.getValue().get("orange").toNBT());
-            tag.put("dim" + i, dimTag);
-            i++;
-        }
+        ListTag list = new ListTag();
+        for (PortalInfo info : portals.values())
+            list.add(info.toNBT());
+        tag.put("portals", list);
         return tag;
     }
 }

@@ -32,15 +32,13 @@ public record PacketRequestTeleport(BlockPos pos) implements CustomPacketPayload
         {
             ServerPlayer player = (ServerPlayer) ctx.player();
             BlockEntity te = player.level().getBlockEntity(packet.pos());
-            if (!(te instanceof TileEntityPortal current)) return;
+            if (!(te instanceof TileEntityPortal current) || current.ownerUUID == null) return;
 
             PortalSavedData data = PortalSavedData.getOrCreate(player.level());
-            if (!data.portalInfo.containsKey(player.level().dimension())) return;
+            PortalInfo pairInfo = data.getPair(current.ownerUUID, current.colorIndex, current.slot);
+            if (pairInfo == null) return;
 
-            PortalInfo info = data.portalInfo.get(player.level().dimension()).get(current.orange ? "blue" : "orange");
-            if (info == null) return;
-
-            BlockEntity destTe = player.level().getBlockEntity(info.pos);
+            BlockEntity destTe = player.level().getBlockEntity(pairInfo.pos);
             if (!(destTe instanceof TileEntityPortal dest)) return;
 
             current.teleport(player.level(), player, dest);

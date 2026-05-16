@@ -10,8 +10,8 @@ import me.ichun.mods.portalgunclassic.common.tileentity.TileEntityPortal;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
-import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -20,10 +20,10 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class ModRegistries
 {
-    public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(PortalGunClassic.MOD_ID);
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(PortalGunClassic.MOD_ID);
+    public static final DeferredRegister.Blocks BLOCKS        = DeferredRegister.createBlocks(PortalGunClassic.MOD_ID);
+    public static final DeferredRegister.Items  ITEMS         = DeferredRegister.createItems(PortalGunClassic.MOD_ID);
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, PortalGunClassic.MOD_ID);
-    public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(Registries.ENTITY_TYPE, PortalGunClassic.MOD_ID);
+    public static final DeferredRegister<EntityType<?>>      ENTITIES       = DeferredRegister.create(Registries.ENTITY_TYPE, PortalGunClassic.MOD_ID);
 
     public static final DeferredBlock<BlockPortal> BLOCK_PORTAL = BLOCKS.register("portal",
         () -> new BlockPortal(BlockBehaviour.Properties.of()
@@ -32,10 +32,9 @@ public class ModRegistries
             .noCollission()
             .noOcclusion()));
 
-    // Two separate items replace the old damage-based subtypes (0=blue, 1=orange)
-    public static final DeferredItem<ItemPortalGun> ITEM_PORTAL_GUN_BLUE   = ITEMS.register("portalgun",        () -> new ItemPortalGun(false));
-    public static final DeferredItem<ItemPortalGun> ITEM_PORTAL_GUN_ORANGE = ITEMS.register("portalgun_orange", () -> new ItemPortalGun(true));
-    public static final DeferredItem<ItemPortalCore> ITEM_PORTAL_CORE      = ITEMS.register("portal_core",      ItemPortalCore::new);
+    // Single portal gun item — color stored as NBT, default cyan
+    public static final DeferredItem<ItemPortalGun>  ITEM_PORTAL_GUN  = ITEMS.register("portalgun",    ItemPortalGun::new);
+    public static final DeferredItem<ItemPortalCore> ITEM_PORTAL_CORE = ITEMS.register("portal_core",  ItemPortalCore::new);
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TileEntityPortal>> TILE_PORTAL =
         BLOCK_ENTITIES.register("tile_portal",

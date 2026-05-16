@@ -28,40 +28,46 @@ import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
+import java.util.UUID;
 
 public class TileEntityPortal extends BlockEntity
 {
     public boolean setup;
     public boolean top;
-    public boolean orange;
+    public int     colorIndex;
+    public String  slot;      // "a" or "b"
+    public UUID    ownerUUID;
     public Direction face;
 
     public TileEntityPortal(BlockPos pos, BlockState state)
     {
         super(ModRegistries.TILE_PORTAL.get(), pos, state);
-        top = false;
-        orange = false;
-        face = Direction.DOWN;
+        top        = false;
+        colorIndex = 0;
+        slot       = "a";
+        face       = Direction.DOWN;
     }
 
     public void tick(Level level, BlockPos pos, BlockState state)
     {
-        if (top) return;
+        if (top || ownerUUID == null) return;
 
-        BlockPos pairLocation = BlockPos.ZERO;
+        BlockPos pairLocation = null;
+
         if (!level.isClientSide)
         {
             PortalSavedData data = PortalSavedData.getOrCreate(level);
-            if (!data.portalInfo.containsKey(level.dimension())) return;
-
-            PortalInfo info = data.portalInfo.get(level.dimension()).get(orange ? "blue" : "orange");
-            if (info == null) return;
-            pairLocation = info.pos;
+            PortalInfo pair = data.getPair(ownerUUID, colorIndex, slot);
+            if (pair == null) return;
+            pairLocation = pair.pos;
         }
         else
         {
-            if (ClientState.status == null) return;
-            if (orange && !ClientState.status.blue || !orange && !ClientState.status.orange) return;
+            // Client side: check our local status map
+            int bits = ClientState.getPortalBits(colorIndex);
+            String pairSlot = slot.equals("a") ? "b" : "a";
+            boolean pairActive = slot.equals("a") ? (bits & 2) != 0 : (bits & 1) != 0;
+            if (!pairActive) return;
         }
 
         int extY = face.getAxis() != Direction.Axis.Y ? 2 : 1;
@@ -85,16 +91,12 @@ public class TileEntityPortal extends BlockEntity
             if (ent.getBoundingBox().move(ent.getDeltaMovement()).intersects(aabbInside))
             {
                 if (level.isClientSide)
-                {
                     handleClientTeleport((Player) ent);
-                }
                 else
                 {
                     BlockEntity te = level.getBlockEntity(pairLocation);
                     if (te instanceof TileEntityPortal pair)
-                    {
                         teleport(level, ent, pair);
-                    }
                 }
             }
         }
@@ -112,10 +114,9 @@ public class TileEntityPortal extends BlockEntity
 
     public void teleport(Level level, Entity ent, TileEntityPortal pair)
     {
-        Vec3 size = new Vec3(
-            ent.getBoundingBox().getXsize(),
-            ent.getBoundingBox().getYsize(),
-            ent.getBoundingBox().getZsize());
+        Vec3 size = new Vec3(ent.getBoundingBox().getXsize(),
+                             ent.getBoundingBox().getYsize(),
+                             ent.getBoundingBox().getZsize());
 
         double px = pair.getBlockPos().getX() + 0.5D - (0.5D - size.x / 2D) * 0.99D * pair.face.getStepX();
         double pz = pair.getBlockPos().getZ() + 0.5D - (0.5D - size.z / 2D) * 0.99D * pair.face.getStepZ();
@@ -130,51 +131,24 @@ public class TileEntityPortal extends BlockEntity
             float yawDiff = face.toYRot() - pair.face.getOpposite().toYRot();
             ent.setYRot(ent.getYRot() - yawDiff);
             ent.yRotO = ent.yRotO - yawDiff;
-
-            if (pair.face == face)
-            {
-                mX = -mX;
-                mZ = -mZ;
-            }
+            if (pair.face == face) { mX = -mX; mZ = -mZ; }
             else if (face.getAxis() == Direction.Axis.X)
             {
-                if (pair.face == Direction.NORTH)
-                {
-                    double tmp = mX;
-                    mZ = -tmp * -face.getStepX();
-                    mX = mZ * -face.getStepX();
-                }
-                else if (pair.face == Direction.SOUTH)
-                {
-                    double tmp = mX;
-                    mZ = tmp * -face.getStepX();
-                    mX = -mZ * -face.getStepX();
-                }
+                if (pair.face == Direction.NORTH)      { double t = mX; mZ = -t * -face.getStepX(); mX = mZ * -face.getStepX(); }
+                else if (pair.face == Direction.SOUTH) { double t = mX; mZ =  t * -face.getStepX(); mX = -mZ * -face.getStepX(); }
             }
             else if (face.getAxis() == Direction.Axis.Z)
             {
-                if (pair.face == Direction.EAST)
-                {
-                    double tmp = mX;
-                    mZ = -tmp * -face.getStepZ();
-                    mX = mZ * -face.getStepZ();
-                }
-                else if (pair.face == Direction.WEST)
-                {
-                    double tmp = mX;
-                    mZ = tmp * -face.getStepZ();
-                    mX = -mZ * -face.getStepZ();
-                }
+                if (pair.face == Direction.EAST)      { double t = mX; mZ = -t * -face.getStepZ(); mX = mZ * -face.getStepZ(); }
+                else if (pair.face == Direction.WEST) { double t = mX; mZ =  t * -face.getStepZ(); mX = -mZ * -face.getStepZ(); }
             }
         }
         else if (face.getAxis() == Direction.Axis.Y && pair.face.getAxis() != Direction.Axis.Y)
         {
-            ent.setXRot(0F);
-            ent.setYRot(pair.face.toYRot());
+            ent.setXRot(0F); ent.setYRot(pair.face.toYRot());
             mX = Math.abs(mY) * pair.face.getStepX();
             mZ = Math.abs(mY) * pair.face.getStepZ();
-            mY = 0D;
-            ent.fallDistance = 0F;
+            mY = 0D; ent.fallDistance = 0F;
         }
         else if (face.getAxis() != Direction.Axis.Y && pair.face.getAxis() == Direction.Axis.Y)
         {
@@ -192,13 +166,11 @@ public class TileEntityPortal extends BlockEntity
         ent.setDeltaMovement(mX, mY, mZ);
         ent.moveTo(ent.getX(), ent.getY(), ent.getZ(), ent.getYRot(), ent.getXRot());
 
-        double entCenterY = worldPosition.getY() + (face.getAxis() != Direction.Axis.Y ? 1D : 0.5D);
-        double pairCenterY = pair.getBlockPos().getY() + (pair.face.getAxis() != Direction.Axis.Y ? 1D : 0.5D);
+        double entCenterY  = worldPosition.getY()          + (face.getAxis()      != Direction.Axis.Y ? 1D : 0.5D);
+        double pairCenterY = pair.getBlockPos().getY()      + (pair.face.getAxis() != Direction.Axis.Y ? 1D : 0.5D);
 
-        level.playSound(null, worldPosition.getX() + 0.5D, entCenterY, worldPosition.getZ() + 0.5D,
-            SoundRegistry.ENTER.get(), SoundSource.BLOCKS, 0.1F, 1.0F);
-        level.playSound(null, pair.getBlockPos().getX() + 0.5D, pairCenterY, pair.getBlockPos().getZ() + 0.5D,
-            SoundRegistry.EXIT.get(), SoundSource.BLOCKS, 0.1F, 1.0F);
+        level.playSound(null, worldPosition.getX() + 0.5D, entCenterY,          worldPosition.getZ() + 0.5D, SoundRegistry.ENTER.get(), SoundSource.BLOCKS, 0.1F, 1.0F);
+        level.playSound(null, pair.getBlockPos().getX() + 0.5D, pairCenterY, pair.getBlockPos().getZ() + 0.5D, SoundRegistry.EXIT.get(),  SoundSource.BLOCKS, 0.1F, 1.0F);
 
         PacketDistributor.sendToPlayersNear(
             (net.minecraft.server.level.ServerLevel) level, null,
@@ -206,19 +178,17 @@ public class TileEntityPortal extends BlockEntity
             256D, new PacketEntityLocation(ent));
     }
 
-    public void setup(boolean top, boolean orange, Direction face)
+    public void setup(boolean top, UUID ownerUUID, int colorIndex, String slot, Direction face)
     {
-        this.setup = true;
-        this.top   = top;
-        this.orange = orange;
-        this.face   = face;
+        this.setup      = true;
+        this.top        = top;
+        this.ownerUUID  = ownerUUID;
+        this.colorIndex = colorIndex;
+        this.slot       = slot;
+        this.face       = face;
     }
 
-    @Override
-    public Packet<ClientGamePacketListener> getUpdatePacket()
-    {
-        return ClientboundBlockEntityDataPacket.create(this);
-    }
+    @Override public Packet<ClientGamePacketListener> getUpdatePacket() { return ClientboundBlockEntityDataPacket.create(this); }
 
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries)
@@ -228,11 +198,7 @@ public class TileEntityPortal extends BlockEntity
         return tag;
     }
 
-    @Override
-    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries)
-    {
-        loadAdditional(tag, registries);
-    }
+    @Override public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) { loadAdditional(tag, registries); }
 
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries)
@@ -240,7 +206,9 @@ public class TileEntityPortal extends BlockEntity
         super.saveAdditional(tag, registries);
         tag.putBoolean("setup", setup);
         tag.putBoolean("top", top);
-        tag.putBoolean("orange", orange);
+        tag.putInt("colorIndex", colorIndex);
+        tag.putString("slot", slot != null ? slot : "a");
+        if (ownerUUID != null) tag.putUUID("ownerUUID", ownerUUID);
         tag.putInt("face", face.get3DDataValue());
     }
 
@@ -248,9 +216,12 @@ public class TileEntityPortal extends BlockEntity
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries)
     {
         super.loadAdditional(tag, registries);
-        setup  = tag.getBoolean("setup");
-        top    = tag.getBoolean("top");
-        orange = tag.getBoolean("orange");
-        face   = Direction.from3DDataValue(tag.getInt("face"));
+        setup      = tag.getBoolean("setup");
+        top        = tag.getBoolean("top");
+        colorIndex = tag.getInt("colorIndex");
+        slot       = tag.getString("slot");
+        if (slot.isEmpty()) slot = "a";
+        ownerUUID  = tag.contains("ownerUUID") ? tag.getUUID("ownerUUID") : null;
+        face       = Direction.from3DDataValue(tag.getInt("face"));
     }
 }

@@ -23,12 +23,17 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
+import java.util.UUID;
+
 public class EntityPortalProjectile extends Entity
 {
-    private static final EntityDataAccessor<Boolean> ORANGE =
-        SynchedEntityData.defineId(EntityPortalProjectile.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> COLOR_INDEX =
+        SynchedEntityData.defineId(EntityPortalProjectile.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<String> SLOT =
+        SynchedEntityData.defineId(EntityPortalProjectile.class, EntityDataSerializers.STRING);
 
     public int age = 0;
+    public UUID ownerUUID = null;
 
     public EntityPortalProjectile(EntityType<EntityPortalProjectile> type, Level level)
     {
@@ -36,25 +41,20 @@ public class EntityPortalProjectile extends Entity
         setInvulnerable(true);
     }
 
-    public EntityPortalProjectile(Level level, Entity shooter, boolean isOrange)
+    public EntityPortalProjectile(Level level, Entity shooter, int colorIndex, String slot)
     {
         this(ModRegistries.ENTITY_PORTAL_PROJECTILE.get(), level);
-        this.entityData.set(ORANGE, isOrange);
+        this.entityData.set(COLOR_INDEX, colorIndex);
+        this.entityData.set(SLOT, slot);
+        this.ownerUUID = shooter.getUUID();
         shoot(shooter, 4.999F);
         setPos(shooter.getX(), shooter.getEyeY() - (getBbWidth() / 2F), shooter.getZ());
         setYRot(shooter.getYRot());
         setXRot(shooter.getXRot());
     }
 
-    public void setOrange(boolean flag)
-    {
-        entityData.set(ORANGE, flag);
-    }
-
-    public boolean isOrange()
-    {
-        return entityData.get(ORANGE);
-    }
+    public int getColorIndex() { return entityData.get(COLOR_INDEX); }
+    public String getSlot()    { return entityData.get(SLOT); }
 
     public void shoot(Entity entity, float velocity)
     {
@@ -63,7 +63,9 @@ public class EntityPortalProjectile extends Entity
         float f2 =  Mth.cos(entity.getYRot() * 0.017453292F) * Mth.cos(entity.getXRot() * 0.017453292F);
         shoot(f, f1, f2, velocity);
         Vec3 em = entity.getDeltaMovement();
-        setDeltaMovement(getDeltaMovement().x + em.x, getDeltaMovement().y + (entity.onGround() ? em.y : 0), getDeltaMovement().z + em.z);
+        setDeltaMovement(getDeltaMovement().x + em.x,
+                         getDeltaMovement().y + (entity.onGround() ? em.y : 0),
+                         getDeltaMovement().z + em.z);
     }
 
     public void shoot(double x, double y, double z, float velocity)
@@ -83,7 +85,8 @@ public class EntityPortalProjectile extends Entity
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder)
     {
-        builder.define(ORANGE, false);
+        builder.define(COLOR_INDEX, 0);
+        builder.define(SLOT, "a");
     }
 
     @Override
@@ -94,18 +97,14 @@ public class EntityPortalProjectile extends Entity
             discard();
             return;
         }
-
         age++;
 
-        xOld = getX();
-        yOld = getY();
-        zOld = getZ();
-
+        xOld = getX(); yOld = getY(); zOld = getZ();
         super.tick();
 
-        Vec3 from = position();
+        Vec3 from   = position();
         Vec3 motion = getDeltaMovement();
-        Vec3 to = from.add(motion);
+        Vec3 to     = from.add(motion);
 
         if (!Double.isNaN(from.x) && !Double.isNaN(from.y) && !Double.isNaN(from.z)
             && !Double.isNaN(to.x) && !Double.isNaN(to.y) && !Double.isNaN(to.z))
@@ -119,23 +118,14 @@ public class EntityPortalProjectile extends Entity
             while (steps-- >= 0)
             {
                 if (Double.isNaN(cur.x) || Double.isNaN(cur.y) || Double.isNaN(cur.z)
-                    || (fi == ti && fj == tj && fk == tk))
-                    break;
+                    || (fi == ti && fj == tj && fk == tk)) break;
 
                 boolean useX = true, useY = true, useZ = true;
                 double bx = 999, by = 999, bz = 999;
 
-                if      (ti > fi) bx = fi + 1.0;
-                else if (ti < fi) bx = fi + 0.0;
-                else              useX = false;
-
-                if      (tj > fj) by = fj + 1.0;
-                else if (tj < fj) by = fj + 0.0;
-                else              useY = false;
-
-                if      (tk > fk) bz = fk + 1.0;
-                else if (tk < fk) bz = fk + 0.0;
-                else              useZ = false;
+                if      (ti > fi) bx = fi + 1.0; else if (ti < fi) bx = fi + 0.0; else useX = false;
+                if      (tj > fj) by = fj + 1.0; else if (tj < fj) by = fj + 0.0; else useY = false;
+                if      (tk > fk) bz = fk + 1.0; else if (tk < fk) bz = fk + 0.0; else useZ = false;
 
                 double dx = to.x - cur.x, dy = to.y - cur.y, dz = to.z - cur.z;
                 double tx = useX ? (bx - cur.x) / dx : 999;
@@ -169,7 +159,6 @@ public class EntityPortalProjectile extends Entity
 
                 BlockPos blockPos = new BlockPos(fi, fj, fk);
                 BlockState bs = level().getBlockState(blockPos);
-
                 VoxelShape shape = bs.getCollisionShape(level(), blockPos);
                 if (!shape.isEmpty())
                 {
@@ -196,7 +185,7 @@ public class EntityPortalProjectile extends Entity
         Vec3 m = getDeltaMovement();
         setPos(getX() + m.x, getY() + m.y, getZ() + m.z);
 
-        float horiz = Mth.sqrt((float)(m.x * m.x + m.z * m.z));
+        float horiz    = Mth.sqrt((float)(m.x * m.x + m.z * m.z));
         float newYaw   = (float)(Mth.atan2(m.x, m.z) * (180D / Math.PI));
         float newPitch = (float)(Mth.atan2(m.y, horiz) * (180D / Math.PI));
 
@@ -211,19 +200,19 @@ public class EntityPortalProjectile extends Entity
 
     public void createPortal(BlockHitResult hit)
     {
-        if (!level().isClientSide)
+        if (!level().isClientSide && ownerUUID != null)
         {
             BlockPos pos = hit.getBlockPos().relative(hit.getDirection());
-            if (BlockPortal.canPlace(level(), pos, hit.getDirection(), isOrange()))
+            if (BlockPortal.canPlace(level(), pos, hit.getDirection(), ownerUUID, getColorIndex(), getSlot()))
             {
-                PortalSavedData.getOrCreate(level()).kill(level(), isOrange());
+                PortalSavedData data = PortalSavedData.getOrCreate(level());
+                data.killForPlayer(level(), ownerUUID, getColorIndex(), getSlot());
 
                 level().setBlock(pos, ModRegistries.BLOCK_PORTAL.get().defaultBlockState(), 3);
                 BlockEntity te = level().getBlockEntity(pos);
                 if (te instanceof TileEntityPortal portal)
-                {
-                    portal.setup(hit.getDirection().getAxis() != Direction.Axis.Y, isOrange(), hit.getDirection());
-                }
+                    portal.setup(hit.getDirection().getAxis() != Direction.Axis.Y,
+                                 ownerUUID, getColorIndex(), getSlot(), hit.getDirection());
 
                 if (hit.getDirection().getAxis() != Direction.Axis.Y)
                 {
@@ -231,16 +220,15 @@ public class EntityPortalProjectile extends Entity
                     level().setBlock(posDown, ModRegistries.BLOCK_PORTAL.get().defaultBlockState(), 3);
                     te = level().getBlockEntity(posDown);
                     if (te instanceof TileEntityPortal portal)
-                    {
-                        portal.setup(false, isOrange(), hit.getDirection());
-                    }
+                        portal.setup(false, ownerUUID, getColorIndex(), getSlot(), hit.getDirection());
                 }
 
                 BlockPos savePos = hit.getDirection().getAxis() != Direction.Axis.Y ? pos.below() : pos;
-                PortalSavedData.getOrCreate(level()).set(level(), isOrange(), savePos);
+                data.set(level(), ownerUUID, getColorIndex(), getSlot(), savePos);
 
+                boolean isSlotA = getSlot().equals("a");
                 level().playSound(null, getX(), getY() + getBbHeight() / 2F, getZ(),
-                    isOrange() ? SoundRegistry.OPENRED.get() : SoundRegistry.OPENBLUE.get(),
+                    isSlotA ? SoundRegistry.FIREBLUE.get() : SoundRegistry.FIRERED.get(),
                     SoundSource.BLOCKS, 0.3F, 1.0F);
             }
             else
@@ -262,12 +250,18 @@ public class EntityPortalProjectile extends Entity
     @Override
     public void readAdditionalSaveData(CompoundTag tag)
     {
-        setOrange(tag.getBoolean("orange"));
+        entityData.set(COLOR_INDEX, tag.getInt("colorIndex"));
+        entityData.set(SLOT, tag.getString("slot"));
+        if (tag.contains("ownerUUID"))
+            ownerUUID = tag.getUUID("ownerUUID");
     }
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag)
     {
-        tag.putBoolean("orange", isOrange());
+        tag.putInt("colorIndex", getColorIndex());
+        tag.putString("slot", getSlot());
+        if (ownerUUID != null)
+            tag.putUUID("ownerUUID", ownerUUID);
     }
 }

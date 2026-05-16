@@ -22,55 +22,28 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 import javax.annotation.Nullable;
+import java.util.UUID;
 
 public class BlockPortal extends BaseEntityBlock
 {
     public static final MapCodec<BlockPortal> CODEC = simpleCodec(BlockPortal::new);
 
-    public BlockPortal(BlockBehaviour.Properties props)
-    {
-        super(props);
-    }
+    public BlockPortal(BlockBehaviour.Properties props) { super(props); }
 
-    @Override
-    protected MapCodec<BlockPortal> codec()
-    {
-        return CODEC;
-    }
+    @Override protected MapCodec<BlockPortal> codec() { return CODEC; }
 
-    @Override
-    public RenderShape getRenderShape(BlockState state)
-    {
-        return RenderShape.ENTITYBLOCK_ANIMATED;
-    }
+    @Override public RenderShape getRenderShape(BlockState state) { return RenderShape.ENTITYBLOCK_ANIMATED; }
+    @Override public VoxelShape getShape(BlockState s, BlockGetter l, BlockPos p, CollisionContext c) { return Shapes.empty(); }
+    @Override public VoxelShape getCollisionShape(BlockState s, BlockGetter l, BlockPos p, CollisionContext c) { return Shapes.empty(); }
 
-    @Override
-    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context)
-    {
-        return Shapes.empty();
-    }
+    @Nullable @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) { return new TileEntityPortal(pos, state); }
 
-    @Override
-    public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context)
-    {
-        return Shapes.empty();
-    }
-
-    @Nullable
-    @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state)
-    {
-        return new TileEntityPortal(pos, state);
-    }
-
-    @Nullable
-    @Override
+    @Nullable @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type)
     {
         if (type == ModRegistries.TILE_PORTAL.get())
-        {
             return (lvl, pos, st, be) -> ((TileEntityPortal) be).tick(lvl, pos, st);
-        }
         return null;
     }
 
@@ -78,31 +51,28 @@ public class BlockPortal extends BaseEntityBlock
     public void neighborChanged(BlockState state, Level world, BlockPos pos, Block blockIn, BlockPos fromPos, boolean isMoving)
     {
         BlockEntity te = world.getBlockEntity(pos);
-        if (te instanceof TileEntityPortal portal)
+        if (te instanceof TileEntityPortal portal && portal.setup && portal.ownerUUID != null)
         {
-            if (portal.setup)
+            if (portal.face.getAxis() == Direction.Axis.Y)
             {
-                if (portal.face.getAxis() == Direction.Axis.Y)
+                BlockPos behind = pos.relative(portal.face.getOpposite());
+                if (!world.getBlockState(behind).isFaceSturdy(world, behind, portal.face))
                 {
-                    BlockPos behind = pos.relative(portal.face.getOpposite());
-                    if (!world.getBlockState(behind).isFaceSturdy(world, behind, portal.face))
-                    {
-                        PortalSavedData.getOrCreate(world).kill(world, portal.orange);
-                        world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
-                    }
+                    PortalSavedData.getOrCreate(world).killForPlayer(world, portal.ownerUUID, portal.colorIndex, portal.slot);
+                    world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                 }
-                else
+            }
+            else
+            {
+                BlockPos other       = portal.top ? pos.below() : pos.above();
+                BlockPos behind      = pos.relative(portal.face.getOpposite());
+                BlockPos otherBehind = other.relative(portal.face.getOpposite());
+                if (!(world.getBlockState(behind).isFaceSturdy(world, behind, portal.face)
+                    && world.getBlockState(otherBehind).isFaceSturdy(world, otherBehind, portal.face))
+                    || world.getBlockState(other).getBlock() != this)
                 {
-                    BlockPos other = portal.top ? pos.below() : pos.above();
-                    BlockPos behind     = pos.relative(portal.face.getOpposite());
-                    BlockPos otherBehind = other.relative(portal.face.getOpposite());
-                    if (!(world.getBlockState(behind).isFaceSturdy(world, behind, portal.face)
-                        && world.getBlockState(otherBehind).isFaceSturdy(world, otherBehind, portal.face))
-                        || world.getBlockState(other).getBlock() != this)
-                    {
-                        PortalSavedData.getOrCreate(world).kill(world, portal.orange);
-                        world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
-                    }
+                    PortalSavedData.getOrCreate(world).killForPlayer(world, portal.ownerUUID, portal.colorIndex, portal.slot);
+                    world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                 }
             }
         }
@@ -112,11 +82,17 @@ public class BlockPortal extends BaseEntityBlock
         }
     }
 
-    public static boolean canPlace(Level world, BlockPos pos, Direction sideHit, boolean isOrange)
+    public static boolean canPlace(Level world, BlockPos pos, Direction sideHit,
+                                   UUID owner, int colorIndex, String slot)
     {
         BlockState state = world.getBlockState(pos);
-        BlockEntity te = world.getBlockEntity(pos);
-        boolean replaceable = state.isAir() || (te instanceof TileEntityPortal portal && portal.setup && portal.orange == isOrange);
+        BlockEntity te   = world.getBlockEntity(pos);
+        boolean replaceable = state.isAir()
+            || (te instanceof TileEntityPortal portal && portal.setup
+                && portal.ownerUUID != null
+                && portal.ownerUUID.equals(owner)
+                && portal.colorIndex == colorIndex
+                && portal.slot.equals(slot));
 
         if (replaceable)
         {
@@ -127,15 +103,18 @@ public class BlockPortal extends BaseEntityBlock
             }
             else
             {
-                BlockPos posDown  = pos.below();
+                BlockPos posDown     = pos.below();
                 BlockState downState = world.getBlockState(posDown);
                 BlockEntity downTe   = world.getBlockEntity(posDown);
-                boolean downReplaceable = downState.isAir() || (downTe instanceof TileEntityPortal dp && dp.setup && dp.orange == isOrange);
+                boolean downOk = downState.isAir()
+                    || (downTe instanceof TileEntityPortal dp && dp.setup
+                        && dp.ownerUUID != null && dp.ownerUUID.equals(owner)
+                        && dp.colorIndex == colorIndex && dp.slot.equals(slot));
 
                 BlockPos behind     = pos.relative(sideHit.getOpposite());
                 BlockPos downBehind = posDown.relative(sideHit.getOpposite());
                 return world.getBlockState(behind).isFaceSturdy(world, behind, sideHit)
-                    && downReplaceable
+                    && downOk
                     && world.getBlockState(downBehind).isFaceSturdy(world, downBehind, sideHit);
             }
         }

@@ -4,24 +4,25 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import me.ichun.mods.portalgunclassic.client.ClientState;
 import me.ichun.mods.portalgunclassic.common.PortalGunClassic;
 import me.ichun.mods.portalgunclassic.common.core.ModRegistries;
-import me.ichun.mods.portalgunclassic.common.packet.PacketSwapType;
+import me.ichun.mods.portalgunclassic.common.item.ItemPortalGun;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
+
+import java.util.Map;
 
 @EventBusSubscriber(modid = PortalGunClassic.MOD_ID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
 public class EventHandlerClientGame
 {
-    public static final ResourceLocation TX_L_EMPTY  = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/overlay/lempty.png");
-    public static final ResourceLocation TX_L_FULL   = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/overlay/lfull.png");
-    public static final ResourceLocation TX_R_EMPTY  = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/overlay/rempty.png");
-    public static final ResourceLocation TX_R_FULL   = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/overlay/rfull.png");
+    // One icon per slot — we tint them with the gun's dye color at render time
+    public static final ResourceLocation TX_SLOT_EMPTY = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/overlay/lempty.png");
+    public static final ResourceLocation TX_SLOT_FULL  = ResourceLocation.fromNamespaceAndPath("portalgunclassic", "textures/overlay/lfull.png");
 
     @SubscribeEvent
     public static void onClientTickPost(ClientTickEvent.Post event)
@@ -29,29 +30,8 @@ public class EventHandlerClientGame
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
 
-        boolean holdingGun = mc.player.getMainHandItem().is(ModRegistries.ITEM_PORTAL_GUN_BLUE.get())
-            || mc.player.getMainHandItem().is(ModRegistries.ITEM_PORTAL_GUN_ORANGE.get())
-            || mc.player.getOffhandItem().is(ModRegistries.ITEM_PORTAL_GUN_BLUE.get())
-            || mc.player.getOffhandItem().is(ModRegistries.ITEM_PORTAL_GUN_ORANGE.get());
-
-        if (holdingGun)
-        {
-            if (!ClientState.keySwitchDown && ClientState.KEY_SWITCH.isDown())
-            {
-                PacketDistributor.sendToServer(new PacketSwapType(false, 0));
-            }
-            if (!ClientState.keyResetDown && ClientState.KEY_RESET.isDown())
-            {
-                PacketDistributor.sendToServer(new PacketSwapType(true, Screen.hasShiftDown() ? 1 : 0));
-            }
-            ClientState.keySwitchDown = ClientState.KEY_SWITCH.isDown();
-            ClientState.keyResetDown  = ClientState.KEY_RESET.isDown();
-        }
-
         if (ClientState.teleportCooldown > 0 && !mc.isPaused())
-        {
             ClientState.teleportCooldown--;
-        }
 
         if (ClientState.justTeleported && mc.player != null)
         {
@@ -69,31 +49,43 @@ public class EventHandlerClientGame
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null || mc.player == null) return;
 
-        boolean holdingGun = mc.player.getMainHandItem().is(ModRegistries.ITEM_PORTAL_GUN_BLUE.get())
-            || mc.player.getMainHandItem().is(ModRegistries.ITEM_PORTAL_GUN_ORANGE.get())
-            || mc.player.getOffhandItem().is(ModRegistries.ITEM_PORTAL_GUN_BLUE.get())
-            || mc.player.getOffhandItem().is(ModRegistries.ITEM_PORTAL_GUN_ORANGE.get());
+        // Check if holding a portal gun
+        ItemStack mainHand = mc.player.getMainHandItem();
+        ItemStack offHand  = mc.player.getOffhandItem();
+        ItemStack gunStack = null;
+        if (mainHand.getItem() instanceof ItemPortalGun) gunStack = mainHand;
+        else if (offHand.getItem() instanceof ItemPortalGun) gunStack = offHand;
+        if (gunStack == null) return;
 
-        if (!holdingGun) return;
+        int heldColor = ItemPortalGun.getColorIndex(gunStack);
+        Map<Integer, Integer> statusMap = ClientState.getPortalStatusSnapshot();
 
-        int w = mc.getWindow().getGuiScaledWidth();
-        int h = mc.getWindow().getGuiScaledHeight();
-        int size = 40;
-        int x1 = w / 2 - size + 1;
-        int y1 = h / 2 - size + 1;
+        int w    = mc.getWindow().getGuiScaledWidth();
+        int h    = mc.getWindow().getGuiScaledHeight();
+        int size = 20;
+        int x    = w / 2 - size - 2;
+        int y    = h / 2 - size / 2;
 
         net.minecraft.client.gui.GuiGraphics gui = event.getGuiGraphics();
-
-        boolean blueActive   = ClientState.status != null && ClientState.status.blue;
-        boolean orangeActive = ClientState.status != null && ClientState.status.orange;
-
         RenderSystem.enableBlend();
 
-        RenderSystem.setShaderColor(5 / 255f, 130 / 255f, 255 / 255f, 1f);
-        gui.blit(blueActive ? TX_L_FULL : TX_L_EMPTY, x1, y1, 0, 0, size * 2, size * 2, size * 2, size * 2);
+        // Draw slot A (left) and slot B (right) for the currently held gun's color
+        int bits     = statusMap.getOrDefault(heldColor, 0);
+        boolean aActive = (bits & 1) != 0;
+        boolean bActive = (bits & 2) != 0;
 
-        RenderSystem.setShaderColor(255 / 255f, 176 / 255f, 6 / 255f, 1f);
-        gui.blit(orangeActive ? TX_R_FULL : TX_R_EMPTY, x1, y1, 0, 0, size * 2, size * 2, size * 2, size * 2);
+        DyeColor dye = DyeColor.byId(heldColor);
+        float[] c    = dye.getTextureDiffuseColors();
+
+        // Slot A — tinted with dye color
+        RenderSystem.setShaderColor(c[0], c[1], c[2], 1f);
+        gui.blit(aActive ? TX_SLOT_FULL : TX_SLOT_EMPTY,
+            x, y, 0, 0, size, size, size, size);
+
+        // Slot B — slightly desaturated tint to distinguish
+        RenderSystem.setShaderColor(c[0] * 0.6f, c[1] * 0.6f, c[2] * 0.6f, 1f);
+        gui.blit(bActive ? TX_SLOT_FULL : TX_SLOT_EMPTY,
+            x + size + 4, y, 0, 0, size, size, size, size);
 
         RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         RenderSystem.disableBlend();
@@ -102,7 +94,7 @@ public class EventHandlerClientGame
     @SubscribeEvent
     public static void onClientConnected(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingIn event)
     {
-        ClientState.status = null;
+        ClientState.updatePortalStatus(null, new java.util.HashMap<>());
         ClientState.justTeleported = false;
     }
 }
