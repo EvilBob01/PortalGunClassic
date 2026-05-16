@@ -1,47 +1,29 @@
 package me.ichun.mods.portalgunclassic.common.packet;
 
 import io.netty.buffer.ByteBuf;
+import me.ichun.mods.portalgunclassic.client.ClientState;
 import me.ichun.mods.portalgunclassic.client.portal.PortalStatus;
-import me.ichun.mods.portalgunclassic.common.PortalGunClassic;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
-import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
-import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-public class PacketPortalStatus implements IMessage
+public record PacketPortalStatus(boolean blue, boolean orange) implements CustomPacketPayload
 {
-    public boolean blue;
-    public boolean orange;
+    public static final Type<PacketPortalStatus> TYPE = new Type<>(
+        ResourceLocation.fromNamespaceAndPath("portalgunclassic", "portal_status"));
 
-    public PacketPortalStatus()
-    {}
-
-    public PacketPortalStatus(boolean blue, boolean orange)
-    {
-        this.blue = blue;
-        this.orange = orange;
-    }
+    public static final StreamCodec<ByteBuf, PacketPortalStatus> STREAM_CODEC = StreamCodec.composite(
+        ByteBufCodecs.BOOL, PacketPortalStatus::blue,
+        ByteBufCodecs.BOOL, PacketPortalStatus::orange,
+        PacketPortalStatus::new);
 
     @Override
-    public void fromBytes(ByteBuf buf)
-    {
-        blue = buf.readBoolean();
-        orange = buf.readBoolean();
-    }
+    public Type<PacketPortalStatus> type() { return TYPE; }
 
-    @Override
-    public void toBytes(ByteBuf buf)
+    public static void handle(PacketPortalStatus packet, IPayloadContext ctx)
     {
-        buf.writeBoolean(blue);
-        buf.writeBoolean(orange);
-    }
-
-    public static class Handler implements IMessageHandler<PacketPortalStatus, IMessage>
-    {
-        @Override
-        public IMessage onMessage(PacketPortalStatus message, MessageContext ctx)
-        {
-            PortalGunClassic.eventHandlerClient.status = new PortalStatus(message.blue, message.orange);
-            return null;
-        }
+        ctx.enqueueWork(() -> ClientState.status = new PortalStatus(packet.blue(), packet.orange()));
     }
 }

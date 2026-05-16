@@ -1,48 +1,35 @@
 package me.ichun.mods.portalgunclassic.common.sounds;
 
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.SoundEvent;
-import net.minecraftforge.registries.IForgeRegistry;
+import me.ichun.mods.portalgunclassic.common.PortalGunClassic;
+import net.minecraft.sounds.SoundEvent;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredHolder;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import net.minecraft.core.registries.Registries;
 
 public class SoundRegistry
 {
-    public static SoundEvent enter;
-    public static SoundEvent exit;
-    public static SoundEvent fizzle;
-    public static SoundEvent invalid;
-    public static SoundEvent openblue;
-    public static SoundEvent openred;
-    public static SoundEvent fireblue;
-    public static SoundEvent firered;
-    public static SoundEvent reset;
-    public static SoundEvent active;
+    public static final DeferredRegister<SoundEvent> SOUNDS = DeferredRegister.create(Registries.SOUND_EVENT, PortalGunClassic.MOD_ID);
 
-    public static boolean init = false;
+    public static final DeferredHolder<SoundEvent, SoundEvent> ENTER    = reg("enter");
+    public static final DeferredHolder<SoundEvent, SoundEvent> EXIT     = reg("exit");
+    public static final DeferredHolder<SoundEvent, SoundEvent> FIZZLE   = reg("fizzle");
+    public static final DeferredHolder<SoundEvent, SoundEvent> INVALID  = reg("invalid");
+    public static final DeferredHolder<SoundEvent, SoundEvent> OPENBLUE = reg("openblue");
+    public static final DeferredHolder<SoundEvent, SoundEvent> OPENRED  = reg("openred");
+    public static final DeferredHolder<SoundEvent, SoundEvent> FIREBLUE = reg("fireblue");
+    public static final DeferredHolder<SoundEvent, SoundEvent> FIRERED  = reg("firered");
+    public static final DeferredHolder<SoundEvent, SoundEvent> RESET    = reg("reset");
+    public static final DeferredHolder<SoundEvent, SoundEvent> ACTIVE   = reg("active");
 
-    public static void init(IForgeRegistry<SoundEvent> registry)
+    private static DeferredHolder<SoundEvent, SoundEvent> reg(String name)
     {
-        if(!init)
-        {
-            init = true;
-
-            enter = register(registry, "enter");
-            exit = register(registry, "exit");
-            fizzle = register(registry, "fizzle");
-            invalid = register(registry, "invalid");
-            openblue = register(registry, "openblue");
-            openred = register(registry, "openred");
-            fireblue = register(registry, "fireblue");
-            firered = register(registry, "firered");
-            reset = register(registry, "reset");
-            active = register(registry, "active");
-        }
+        return SOUNDS.register(name, () -> SoundEvent.createVariableRangeEvent(
+            net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(PortalGunClassic.MOD_ID, name)));
     }
 
-    private static SoundEvent register(IForgeRegistry<SoundEvent> registry, String name)
+    public static void register(IEventBus modBus)
     {
-        ResourceLocation rs = new ResourceLocation("portalgunclassic", name);
-        SoundEvent event = new SoundEvent(rs).setRegistryName(rs);
-        registry.register(event);
-        return event;
+        SOUNDS.register(modBus);
     }
 }

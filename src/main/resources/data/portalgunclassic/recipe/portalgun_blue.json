@@ -1,0 +1,11 @@
+{
+    "type": "minecraft:crafting_shapeless",
+    "ingredients": [
+        { "item": "portalgunclassic:portalgun_orange" },
+        { "item": "minecraft:blue_dye" }
+    ],
+    "result": {
+        "id": "portalgunclassic:portalgun",
+        "count": 1
+    }
+}

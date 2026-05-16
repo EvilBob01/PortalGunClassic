@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone *)",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "Bash(git reset *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\evilbob\\\\Desktop\\\\Claude\\\\Portal-Gun\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\evilbob\\\\Desktop\\\\Claude\\\\Portal-Gun\\\\src\\\\main\\\\resources\\\\mcmod.info\" -Force -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\evilbob\\\\Desktop\\\\Claude\\\\Portal-Gun\\\\src\\\\main\\\\resources\\\\assets\\\\portalgunclassic\\\\lang\\\\en_us.lang\" -Force -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\evilbob\\\\Desktop\\\\Claude\\\\Portal-Gun\\\\src\\\\main\\\\resources\\\\assets\\\\portalgunclassic\\\\recipes\" -Recurse -Force -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\evilbob\\\\Desktop\\\\Claude\\\\Portal-Gun\\\\src\\\\main\\\\java\\\\me\\\\ichun\\\\mods\\\\portalgunclassic\\\\common\\\\core\\\\ProxyCommon.java\" -Force -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\evilbob\\\\Desktop\\\\Claude\\\\Portal-Gun\\\\src\\\\main\\\\java\\\\me\\\\ichun\\\\mods\\\\portalgunclassic\\\\client\\\\core\\\\ProxyClient.java\" -Force -ErrorAction SilentlyContinue)"
+    ]
+  }
+}

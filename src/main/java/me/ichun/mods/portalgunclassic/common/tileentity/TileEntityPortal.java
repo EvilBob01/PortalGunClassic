@@ -1,238 +1,256 @@
 package me.ichun.mods.portalgunclassic.common.tileentity;
 
-import me.ichun.mods.portalgunclassic.common.PortalGunClassic;
+import me.ichun.mods.portalgunclassic.client.ClientState;
+import me.ichun.mods.portalgunclassic.common.core.ModRegistries;
 import me.ichun.mods.portalgunclassic.common.packet.PacketEntityLocation;
 import me.ichun.mods.portalgunclassic.common.packet.PacketRequestTeleport;
 import me.ichun.mods.portalgunclassic.common.portal.PortalInfo;
 import me.ichun.mods.portalgunclassic.common.sounds.SoundRegistry;
+import me.ichun.mods.portalgunclassic.common.world.PortalSavedData;
 import net.minecraft.client.Minecraft;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.network.NetworkManager;
-import net.minecraft.network.play.server.SPacketUpdateTileEntity;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.ITickable;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraftforge.fml.common.network.NetworkRegistry;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.network.PacketDistributor;
 
-import javax.annotation.Nullable;
 import java.util.List;
 
-public class TileEntityPortal extends TileEntity implements ITickable
+public class TileEntityPortal extends BlockEntity
 {
     public boolean setup;
     public boolean top;
     public boolean orange;
-    public EnumFacing face;
+    public Direction face;
 
-    public TileEntityPortal()
+    public TileEntityPortal(BlockPos pos, BlockState state)
     {
+        super(ModRegistries.TILE_PORTAL.get(), pos, state);
         top = false;
         orange = false;
-        face = EnumFacing.DOWN;
+        face = Direction.DOWN;
     }
 
-    @Override
-    public void update()
+    public void tick(Level level, BlockPos pos, BlockState state)
     {
-        if(top)
-        {
-            return; //The top never does anything and is there just to look pretty.
-        }
+        if (top) return;
 
-        BlockPos pairLocation = BlockPos.ORIGIN;
-        if(!world.isRemote)
+        BlockPos pairLocation = BlockPos.ZERO;
+        if (!level.isClientSide)
         {
-            if(!PortalGunClassic.eventHandlerServer.getSaveData(world).portalInfo.containsKey(world.provider.getDimension()))
-            {
-                return;
-            }
-            PortalInfo info = PortalGunClassic.eventHandlerServer.getSaveData(world).portalInfo.get(world.provider.getDimension()).get(orange ? "blue" : "orange");
-            if(info == null)
-            {
-                return;
-            }
+            PortalSavedData data = PortalSavedData.getOrCreate(level);
+            if (!data.portalInfo.containsKey(level.dimension())) return;
+
+            PortalInfo info = data.portalInfo.get(level.dimension()).get(orange ? "blue" : "orange");
+            if (info == null) return;
             pairLocation = info.pos;
         }
         else
         {
-            if(orange && !PortalGunClassic.eventHandlerClient.status.blue || !orange && !PortalGunClassic.eventHandlerClient.status.orange)
-            {
-                return;
-            }
+            if (ClientState.status == null) return;
+            if (orange && !ClientState.status.blue || !orange && !ClientState.status.orange) return;
         }
-        //Only hits here if we have a pair
-        AxisAlignedBB aabbScan =   new AxisAlignedBB(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1, pos.getY() + (face.getAxis() != EnumFacing.Axis.Y ? 2 : 1), pos.getZ() + 1).expand(face.getFrontOffsetX() * 4, face.getFrontOffsetY() * 4, face.getFrontOffsetZ() * 4);
-        AxisAlignedBB aabbInside = new AxisAlignedBB(pos.getX(), pos.getY(), pos.getZ(), pos.getX() + 1, pos.getY() + (face.getAxis() != EnumFacing.Axis.Y ? 2 : 1), pos.getZ() + 1).expand(face.getFrontOffsetX() * 9, face.getFrontOffsetY() * 9, face.getFrontOffsetZ() * 9).offset(-face.getFrontOffsetX() * 9.999D, -face.getFrontOffsetY() * 9.999D, -face.getFrontOffsetZ() * 9.999D);
-        List<Entity> ents = world.getEntitiesWithinAABB(world.isRemote ? EntityPlayer.class : Entity.class, aabbScan);
-        for(Entity ent : ents)
-        {
-            if(!world.isRemote && ent instanceof EntityPlayer)
-            {
-                continue; //we ignore players. They tell the server when they want a teleport.
-            }
 
-            if(ent.getEntityBoundingBox().offset(ent.motionX, ent.motionY, ent.motionZ).intersects(aabbInside))
+        int extY = face.getAxis() != Direction.Axis.Y ? 2 : 1;
+        AABB aabbScan = new AABB(pos.getX(), pos.getY(), pos.getZ(),
+            pos.getX() + 1, pos.getY() + extY, pos.getZ() + 1)
+            .expandTowards(face.getStepX() * 4D, face.getStepY() * 4D, face.getStepZ() * 4D);
+
+        AABB aabbInside = new AABB(pos.getX(), pos.getY(), pos.getZ(),
+            pos.getX() + 1, pos.getY() + extY, pos.getZ() + 1)
+            .expandTowards(face.getStepX() * 9D, face.getStepY() * 9D, face.getStepZ() * 9D)
+            .move(-face.getStepX() * 9.999D, -face.getStepY() * 9.999D, -face.getStepZ() * 9.999D);
+
+        List<? extends Entity> ents = level.isClientSide
+            ? level.getEntitiesOfClass(Player.class, aabbScan)
+            : level.getEntitiesOfClass(Entity.class, aabbScan);
+
+        for (Entity ent : ents)
+        {
+            if (!level.isClientSide && ent instanceof Player) continue;
+
+            if (ent.getBoundingBox().move(ent.getDeltaMovement()).intersects(aabbInside))
             {
-                if(world.isRemote)
+                if (level.isClientSide)
                 {
-                    handleClientTeleport((EntityPlayer)ent);
+                    handleClientTeleport((Player) ent);
                 }
                 else
                 {
-                    TileEntity te = world.getTileEntity(pairLocation);
-                    if(te instanceof TileEntityPortal)
+                    BlockEntity te = level.getBlockEntity(pairLocation);
+                    if (te instanceof TileEntityPortal pair)
                     {
-                        teleport(ent, (TileEntityPortal)te);
+                        teleport(level, ent, pair);
                     }
                 }
             }
         }
     }
 
-    @SideOnly(Side.CLIENT)
-    public void handleClientTeleport(EntityPlayer player)
+    @OnlyIn(Dist.CLIENT)
+    public void handleClientTeleport(Player player)
     {
-        if(PortalGunClassic.eventHandlerClient.teleportCooldown <= 0 && player == Minecraft.getMinecraft().player)
+        if (ClientState.teleportCooldown <= 0 && player == Minecraft.getInstance().player)
         {
-            PortalGunClassic.eventHandlerClient.teleportCooldown = 3;
-            PortalGunClassic.channel.sendToServer(new PacketRequestTeleport(pos));
+            ClientState.teleportCooldown = 3;
+            PacketDistributor.sendToServer(new PacketRequestTeleport(worldPosition));
         }
     }
 
-    //This code is bad. I know.
-    public void teleport(Entity ent, TileEntityPortal pair)
+    public void teleport(Level level, Entity ent, TileEntityPortal pair)
     {
-        ent.posX = pair.getPos().getX() + 0.5D - (0.5D - (ent.getEntityBoundingBox().maxX - ent.getEntityBoundingBox().minX) / 2D) * 0.99D * pair.face.getFrontOffsetX();
-        ent.posZ = pair.getPos().getZ() + 0.5D - (0.5D - (ent.getEntityBoundingBox().maxZ - ent.getEntityBoundingBox().minZ) / 2D) * 0.99D * pair.face.getFrontOffsetZ();
+        Vec3 size = new Vec3(
+            ent.getBoundingBox().getXsize(),
+            ent.getBoundingBox().getYsize(),
+            ent.getBoundingBox().getZsize());
 
-        ent.posY = pair.getPos().getY() + (pair.face.getFrontOffsetY() < 0 ? -(ent.getEntityBoundingBox().maxY - ent.getEntityBoundingBox().minY) + 0.999D : 0.001D);
+        double px = pair.getBlockPos().getX() + 0.5D - (0.5D - size.x / 2D) * 0.99D * pair.face.getStepX();
+        double pz = pair.getBlockPos().getZ() + 0.5D - (0.5D - size.z / 2D) * 0.99D * pair.face.getStepZ();
+        double py = pair.getBlockPos().getY() + (pair.face.getStepY() < 0 ? -size.y + 0.999D : 0.001D);
+        ent.setPos(px, py, pz);
 
-        if(face.getAxis() != EnumFacing.Axis.Y && pair.face.getAxis() != EnumFacing.Axis.Y) //horizontal
+        Vec3 motion = ent.getDeltaMovement();
+        double mX = motion.x, mY = motion.y, mZ = motion.z;
+
+        if (face.getAxis() != Direction.Axis.Y && pair.face.getAxis() != Direction.Axis.Y)
         {
-            float yawDiff = face.getHorizontalAngle() - (pair.face.getOpposite().getHorizontalAngle());
-            ent.prevRotationPitch -= yawDiff;
-            ent.rotationYaw -= yawDiff;
+            float yawDiff = face.toYRot() - pair.face.getOpposite().toYRot();
+            ent.setYRot(ent.getYRot() - yawDiff);
+            ent.yRotO = ent.yRotO - yawDiff;
 
-            double mX = ent.motionX;
-            double mZ = ent.motionZ;
-
-            if(pair.face == face)
+            if (pair.face == face)
             {
-                ent.motionX = -mX;
-                ent.motionZ = -mZ;
+                mX = -mX;
+                mZ = -mZ;
             }
-            else if(face.getAxis() == EnumFacing.Axis.X)
+            else if (face.getAxis() == Direction.Axis.X)
             {
-                if(pair.face == EnumFacing.NORTH)
+                if (pair.face == Direction.NORTH)
                 {
-                    ent.motionZ = -mX * - face.getFrontOffsetX();
-                    ent.motionX = mZ * - face.getFrontOffsetX();
+                    double tmp = mX;
+                    mZ = -tmp * -face.getStepX();
+                    mX = mZ * -face.getStepX();
                 }
-                else if(pair.face == EnumFacing.SOUTH)
+                else if (pair.face == Direction.SOUTH)
                 {
-                    ent.motionZ = mX * - face.getFrontOffsetX();
-                    ent.motionX = -mZ * - face.getFrontOffsetX();
+                    double tmp = mX;
+                    mZ = tmp * -face.getStepX();
+                    mX = -mZ * -face.getStepX();
                 }
             }
-            else if(face.getAxis() == EnumFacing.Axis.Z)
+            else if (face.getAxis() == Direction.Axis.Z)
             {
-                if(pair.face == EnumFacing.EAST)
+                if (pair.face == Direction.EAST)
                 {
-                    ent.motionZ = -mX * - face.getFrontOffsetZ();
-                    ent.motionX = mZ * - face.getFrontOffsetZ();
+                    double tmp = mX;
+                    mZ = -tmp * -face.getStepZ();
+                    mX = mZ * -face.getStepZ();
                 }
-                else if(pair.face == EnumFacing.WEST)
+                else if (pair.face == Direction.WEST)
                 {
-                    ent.motionZ = mX * - face.getFrontOffsetZ();
-                    ent.motionX = -mZ * - face.getFrontOffsetZ();
+                    double tmp = mX;
+                    mZ = tmp * -face.getStepZ();
+                    mX = -mZ * -face.getStepZ();
                 }
             }
         }
-        else if(face.getAxis() == EnumFacing.Axis.Y && pair.face.getAxis() != EnumFacing.Axis.Y) //from vertical to horizontal
+        else if (face.getAxis() == Direction.Axis.Y && pair.face.getAxis() != Direction.Axis.Y)
         {
-            ent.rotationPitch = 0F;
-            ent.rotationYaw = pair.face.getHorizontalAngle();
-            ent.motionX = Math.abs(ent.motionY) * pair.face.getFrontOffsetX();
-            ent.motionZ = Math.abs(ent.motionY) * pair.face.getFrontOffsetZ();
-            ent.motionY = 0D;
+            ent.setXRot(0F);
+            ent.setYRot(pair.face.toYRot());
+            mX = Math.abs(mY) * pair.face.getStepX();
+            mZ = Math.abs(mY) * pair.face.getStepZ();
+            mY = 0D;
             ent.fallDistance = 0F;
         }
-        else if(face.getAxis() != EnumFacing.Axis.Y && pair.face.getAxis() == EnumFacing.Axis.Y) //from horizontal to vertical
+        else if (face.getAxis() != Direction.Axis.Y && pair.face.getAxis() == Direction.Axis.Y)
         {
-            ent.motionY = Math.sqrt(ent.motionX * ent.motionX + ent.motionZ * ent.motionZ) * pair.face.getFrontOffsetY();
+            mY = Math.sqrt(mX * mX + mZ * mZ) * pair.face.getStepY();
         }
-        else //vertical only
+        else
         {
-            if(pair.face == face)
-            {
-                ent.motionY = -ent.motionY;
-            }
+            if (pair.face == face) mY = -mY;
             ent.fallDistance = 0F;
         }
-        ent.motionX += pair.face.getFrontOffsetX() * 0.2D;
-        ent.motionY += pair.face.getFrontOffsetY() * 0.2D;
-        ent.motionZ += pair.face.getFrontOffsetZ() * 0.2D;
-        ent.setLocationAndAngles(ent.posX, ent.posY, ent.posZ, ent.rotationYaw, ent.rotationPitch);
 
-        world.playSound(null, this.getPos().getX() + 0.5D, this.getPos().getY() + (face.getAxis() != EnumFacing.Axis.Y ? 1D : 0.5D), this.getPos().getZ() + 0.5D, SoundRegistry.enter, SoundCategory.BLOCKS, 0.1F, 1.0F);
-        world.playSound(null, pair.getPos().getX() + 0.5D, pair.getPos().getY() + (pair.face.getAxis() != EnumFacing.Axis.Y ? 1D : 0.5D), pair.getPos().getZ() + 0.5D, SoundRegistry.exit, SoundCategory.BLOCKS, 0.1F, 1.0F);
+        mX += pair.face.getStepX() * 0.2D;
+        mY += pair.face.getStepY() * 0.2D;
+        mZ += pair.face.getStepZ() * 0.2D;
+        ent.setDeltaMovement(mX, mY, mZ);
+        ent.moveTo(ent.getX(), ent.getY(), ent.getZ(), ent.getYRot(), ent.getXRot());
 
-        PortalGunClassic.channel.sendToAllAround(new PacketEntityLocation(ent), new NetworkRegistry.TargetPoint(ent.getEntityWorld().provider.getDimension(), pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D, 256));
+        double entCenterY = worldPosition.getY() + (face.getAxis() != Direction.Axis.Y ? 1D : 0.5D);
+        double pairCenterY = pair.getBlockPos().getY() + (pair.face.getAxis() != Direction.Axis.Y ? 1D : 0.5D);
+
+        level.playSound(null, worldPosition.getX() + 0.5D, entCenterY, worldPosition.getZ() + 0.5D,
+            SoundRegistry.ENTER.get(), SoundSource.BLOCKS, 0.1F, 1.0F);
+        level.playSound(null, pair.getBlockPos().getX() + 0.5D, pairCenterY, pair.getBlockPos().getZ() + 0.5D,
+            SoundRegistry.EXIT.get(), SoundSource.BLOCKS, 0.1F, 1.0F);
+
+        PacketDistributor.sendToPlayersNear(
+            (net.minecraft.server.level.ServerLevel) level, null,
+            worldPosition.getX() + 0.5D, worldPosition.getY() + 0.5D, worldPosition.getZ() + 0.5D,
+            256D, new PacketEntityLocation(ent));
     }
 
-    @Override
-    @Nullable
-    public SPacketUpdateTileEntity getUpdatePacket()
-    {
-        return new SPacketUpdateTileEntity(this.pos, 0, this.getUpdateTag());
-    }
-
-    @Override
-    public NBTTagCompound getUpdateTag()
-    {
-        return this.writeToNBT(new NBTTagCompound());
-    }
-
-    @Override
-    public void onDataPacket(NetworkManager net, SPacketUpdateTileEntity pkt)
-    {
-        this.readFromNBT(pkt.getNbtCompound());
-    }
-
-    public void setup(boolean top, boolean orange, EnumFacing face)
+    public void setup(boolean top, boolean orange, Direction face)
     {
         this.setup = true;
-
-        this.top = top;
+        this.top   = top;
         this.orange = orange;
-        this.face = face;
+        this.face   = face;
     }
 
     @Override
-    public NBTTagCompound writeToNBT(NBTTagCompound tag)
+    public Packet<ClientGamePacketListener> getUpdatePacket()
     {
-        super.writeToNBT(tag);
-        tag.setBoolean("setup", setup);
-        tag.setBoolean("top", top);
-        tag.setBoolean("orange", orange);
-        tag.setInteger("face", face.getIndex());
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries)
+    {
+        CompoundTag tag = new CompoundTag();
+        saveAdditional(tag, registries);
         return tag;
     }
 
     @Override
-    public void readFromNBT(NBTTagCompound tag)
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries)
     {
-        super.readFromNBT(tag);
-        setup = tag.getBoolean("setup");
-        top = tag.getBoolean("top");
+        loadAdditional(tag, registries);
+    }
+
+    @Override
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries)
+    {
+        super.saveAdditional(tag, registries);
+        tag.putBoolean("setup", setup);
+        tag.putBoolean("top", top);
+        tag.putBoolean("orange", orange);
+        tag.putInt("face", face.get3DDataValue());
+    }
+
+    @Override
+    public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries)
+    {
+        super.loadAdditional(tag, registries);
+        setup  = tag.getBoolean("setup");
+        top    = tag.getBoolean("top");
         orange = tag.getBoolean("orange");
-        face = EnumFacing.getFront(tag.getInteger("face"));
+        face   = Direction.from3DDataValue(tag.getInt("face"));
     }
 }

@@ -2,12 +2,13 @@ package me.ichun.mods.portalgunclassic.common.portal;
 
 import me.ichun.mods.portalgunclassic.common.sounds.SoundRegistry;
 import me.ichun.mods.portalgunclassic.common.tileentity.TileEntityPortal;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
 public class PortalInfo
 {
@@ -20,41 +21,42 @@ public class PortalInfo
         pos = poss;
     }
 
-    public void kill(World world)
+    public void kill(Level world)
     {
-        TileEntity te = world.getTileEntity(pos);
-        if(te instanceof TileEntityPortal)
+        BlockEntity te = world.getBlockEntity(pos);
+        if (te instanceof TileEntityPortal portal)
         {
-            TileEntityPortal portal = (TileEntityPortal)te;
-
-            world.setBlockToAir(pos);
-            if(portal.face.getAxis() != EnumFacing.Axis.Y)
+            world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+            if (portal.face.getAxis() != Direction.Axis.Y)
             {
-                BlockPos offset = portal.top ? pos.down() : pos.up();
-                if(world.getTileEntity(offset) instanceof TileEntityPortal)
+                BlockPos offset = portal.top ? pos.below() : pos.above();
+                if (world.getBlockEntity(offset) instanceof TileEntityPortal)
                 {
-                    world.setBlockToAir(offset);
+                    world.setBlock(offset, Blocks.AIR.defaultBlockState(), 3);
                 }
             }
 
-            world.playSound(null, pos.getX() + (portal.face.getAxis() != EnumFacing.Axis.Y ? 1D : 0.5D), pos.getY() + (portal.face.getAxis() == EnumFacing.Axis.Y ? 0.0D : 0.5D), pos.getZ() + (portal.face.getAxis() != EnumFacing.Axis.Y ? 1D : 0.5D), SoundRegistry.fizzle, SoundCategory.BLOCKS, 0.3F, 1F);
+            double cx = pos.getX() + (portal.face.getAxis() != Direction.Axis.Y ? 1D : 0.5D);
+            double cy = pos.getY() + (portal.face.getAxis() == Direction.Axis.Y  ? 0D  : 0.5D);
+            double cz = pos.getZ() + (portal.face.getAxis() != Direction.Axis.Y ? 1D : 0.5D);
+            world.playSound(null, cx, cy, cz, SoundRegistry.FIZZLE.get(), SoundSource.BLOCKS, 0.3F, 1F);
         }
         else
         {
-            world.setBlockToAir(pos);
+            world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
         }
     }
 
-    public NBTTagCompound toNBT()
+    public CompoundTag toNBT()
     {
-        NBTTagCompound tag = new NBTTagCompound();
-        tag.setBoolean("orange", isOrange);
-        tag.setLong("pos", pos.toLong());
+        CompoundTag tag = new CompoundTag();
+        tag.putBoolean("orange", isOrange);
+        tag.putLong("pos", pos.asLong());
         return tag;
     }
 
-    public static PortalInfo createFromNBT(NBTTagCompound tag)
+    public static PortalInfo createFromNBT(CompoundTag tag)
     {
-        return new PortalInfo(tag.getBoolean("orange"), BlockPos.fromLong(tag.getLong("pos")));
+        return new PortalInfo(tag.getBoolean("orange"), BlockPos.of(tag.getLong("pos")));
     }
 }

@@ -1,120 +1,142 @@
 package me.ichun.mods.portalgunclassic.common.block;
 
-import me.ichun.mods.portalgunclassic.common.PortalGunClassic;
+import com.mojang.serialization.MapCodec;
+import me.ichun.mods.portalgunclassic.common.core.ModRegistries;
 import me.ichun.mods.portalgunclassic.common.tileentity.TileEntityPortal;
-import net.minecraft.block.Block;
-import net.minecraft.block.ITileEntityProvider;
-import net.minecraft.block.material.Material;
-import net.minecraft.block.state.BlockFaceShape;
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.IBlockAccess;
-import net.minecraft.world.World;
+import me.ichun.mods.portalgunclassic.common.world.PortalSavedData;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import javax.annotation.Nullable;
 
-public class BlockPortal extends Block implements ITileEntityProvider
+public class BlockPortal extends BaseEntityBlock
 {
-    public static final AxisAlignedBB EMPTY_AABB = new AxisAlignedBB(0.0D, 0.0D, 0.0D, 0.0D, 0.0D, 0.0D);
+    public static final MapCodec<BlockPortal> CODEC = simpleCodec(BlockPortal::new);
 
-    public BlockPortal()
+    public BlockPortal(BlockBehaviour.Properties props)
     {
-        super(Material.CIRCUITS);
-        setHardness(-1F);
-        setResistance(1000000.0F);
-        setLightLevel(0.5F);
-        setRegistryName(new ResourceLocation("portalgunclassic", "portal"));
-        setUnlocalizedName("portalgunclassic.block.blockportal");
+        super(props);
+    }
+
+    @Override
+    protected MapCodec<BlockPortal> codec()
+    {
+        return CODEC;
+    }
+
+    @Override
+    public RenderShape getRenderShape(BlockState state)
+    {
+        return RenderShape.ENTITYBLOCK_ANIMATED;
+    }
+
+    @Override
+    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context)
+    {
+        return Shapes.empty();
+    }
+
+    @Override
+    public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context)
+    {
+        return Shapes.empty();
     }
 
     @Nullable
     @Override
-    public TileEntity createNewTileEntity(World worldIn, int meta)
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state)
     {
-        return new TileEntityPortal();
+        return new TileEntityPortal(pos, state);
     }
 
-    @Override
-    public boolean isFullCube(IBlockState state)
-    {
-        return false;
-    }
-
-    @Override
-    public boolean isOpaqueCube(IBlockState state)
-    {
-        return false;
-    }
-
-    @Override
-    public AxisAlignedBB getBoundingBox(IBlockState state, IBlockAccess worldIn, BlockPos pos)
-    {
-        return EMPTY_AABB;
-    }
-
-    @Override
     @Nullable
-    public AxisAlignedBB getCollisionBoundingBox(IBlockState blockState, IBlockAccess worldIn, BlockPos pos)
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type)
     {
+        if (type == ModRegistries.TILE_PORTAL.get())
+        {
+            return (lvl, pos, st, be) -> ((TileEntityPortal) be).tick(lvl, pos, st);
+        }
         return null;
     }
 
     @Override
-    public BlockFaceShape getBlockFaceShape(IBlockAccess worldIn, IBlockState state, BlockPos pos, EnumFacing face)
+    public void neighborChanged(BlockState state, Level world, BlockPos pos, Block blockIn, BlockPos fromPos, boolean isMoving)
     {
-        return BlockFaceShape.UNDEFINED;
-    }
-
-    @Override
-    public void neighborChanged(IBlockState state, World world, BlockPos pos, Block blockIn, BlockPos fromPos)
-    {
-        TileEntity te = world.getTileEntity(pos);
-        if(te instanceof TileEntityPortal)
+        BlockEntity te = world.getBlockEntity(pos);
+        if (te instanceof TileEntityPortal portal)
         {
-            TileEntityPortal portal = (TileEntityPortal)te;
-            if(portal.setup)
+            if (portal.setup)
             {
-                if(portal.face.getAxis() == EnumFacing.Axis.Y)
+                if (portal.face.getAxis() == Direction.Axis.Y)
                 {
-                    if(!world.isSideSolid(pos.offset(portal.face, -1), portal.face))
+                    BlockPos behind = pos.relative(portal.face.getOpposite());
+                    if (!world.getBlockState(behind).isFaceSturdy(world, behind, portal.face))
                     {
-                        PortalGunClassic.eventHandlerServer.getSaveData(world).kill(world, portal.orange);
-                        world.setBlockToAir(pos);
+                        PortalSavedData.getOrCreate(world).kill(world, portal.orange);
+                        world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                     }
                 }
                 else
                 {
-                    BlockPos other = portal.top ? pos.down() : pos.up();
-                    if(!(world.isSideSolid(pos.offset(portal.face, -1), portal.face) && world.isSideSolid(other.offset(portal.face, -1), portal.face)) || world.getBlockState(other).getBlock() != this)
+                    BlockPos other = portal.top ? pos.below() : pos.above();
+                    BlockPos behind     = pos.relative(portal.face.getOpposite());
+                    BlockPos otherBehind = other.relative(portal.face.getOpposite());
+                    if (!(world.getBlockState(behind).isFaceSturdy(world, behind, portal.face)
+                        && world.getBlockState(otherBehind).isFaceSturdy(world, otherBehind, portal.face))
+                        || world.getBlockState(other).getBlock() != this)
                     {
-                        PortalGunClassic.eventHandlerServer.getSaveData(world).kill(world, portal.orange);
-                        world.setBlockToAir(pos);
+                        PortalSavedData.getOrCreate(world).kill(world, portal.orange);
+                        world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                     }
                 }
             }
         }
         else
         {
-            world.setBlockToAir(pos);
+            world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
         }
     }
 
-    public static boolean canPlace(World world, BlockPos pos, EnumFacing sideHit, boolean isOrange)
+    public static boolean canPlace(Level world, BlockPos pos, Direction sideHit, boolean isOrange)
     {
-        if(world.getBlockState(pos).getBlock().isReplaceable(world, pos) || world.getTileEntity(pos) instanceof TileEntityPortal && ((TileEntityPortal)world.getTileEntity(pos)).setup && ((TileEntityPortal)world.getTileEntity(pos)).orange == isOrange)
+        BlockState state = world.getBlockState(pos);
+        BlockEntity te = world.getBlockEntity(pos);
+        boolean replaceable = state.isAir() || (te instanceof TileEntityPortal portal && portal.setup && portal.orange == isOrange);
+
+        if (replaceable)
         {
-            if(sideHit.getAxis() == EnumFacing.Axis.Y) //1 block portal
+            if (sideHit.getAxis() == Direction.Axis.Y)
             {
-                return world.isSideSolid(pos.offset(sideHit, -1), sideHit);
+                BlockPos behind = pos.relative(sideHit.getOpposite());
+                return world.getBlockState(behind).isFaceSturdy(world, behind, sideHit);
             }
             else
             {
-                BlockPos posDown = pos.down();
-                return world.isSideSolid(pos.offset(sideHit, -1), sideHit) && (world.getBlockState(posDown).getBlock().isReplaceable(world, posDown) || world.getTileEntity(posDown) instanceof TileEntityPortal && ((TileEntityPortal)world.getTileEntity(posDown)).setup && ((TileEntityPortal)world.getTileEntity(posDown)).orange == isOrange) && world.isSideSolid(posDown.offset(sideHit, -1), sideHit);
+                BlockPos posDown  = pos.below();
+                BlockState downState = world.getBlockState(posDown);
+                BlockEntity downTe   = world.getBlockEntity(posDown);
+                boolean downReplaceable = downState.isAir() || (downTe instanceof TileEntityPortal dp && dp.setup && dp.orange == isOrange);
+
+                BlockPos behind     = pos.relative(sideHit.getOpposite());
+                BlockPos downBehind = posDown.relative(sideHit.getOpposite());
+                return world.getBlockState(behind).isFaceSturdy(world, behind, sideHit)
+                    && downReplaceable
+                    && world.getBlockState(downBehind).isFaceSturdy(world, downBehind, sideHit);
             }
         }
         return false;

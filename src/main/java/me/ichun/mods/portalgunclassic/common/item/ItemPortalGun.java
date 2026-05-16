@@ -1,35 +1,39 @@
 package me.ichun.mods.portalgunclassic.common.item;
 
+import me.ichun.mods.portalgunclassic.common.core.ModRegistries;
 import me.ichun.mods.portalgunclassic.common.entity.EntityPortalProjectile;
 import me.ichun.mods.portalgunclassic.common.sounds.SoundRegistry;
-import net.minecraft.creativetab.CreativeTabs;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.*;
-import net.minecraft.world.World;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
 public class ItemPortalGun extends Item
 {
-    public ItemPortalGun()
+    public final boolean isOrange;
+
+    public ItemPortalGun(boolean isOrange)
     {
-        setMaxStackSize(1);
-        setHasSubtypes(true);
-        setMaxDamage(0);
-        setRegistryName(new ResourceLocation("portalgunclassic", "portalgun"));
-        setUnlocalizedName("portalgunclassic.item.portalgun");
-        setCreativeTab(CreativeTabs.TOOLS);
+        super(new Item.Properties().stacksTo(1));
+        this.isOrange = isOrange;
     }
 
     @Override
-    public ActionResult<ItemStack> onItemRightClick(World world, EntityPlayer player, EnumHand handIn)
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand)
     {
-        if(!world.isRemote)
+        if (!level.isClientSide)
         {
-            ItemStack is = player.getHeldItem(handIn);
-            world.playSound(null, player.posX, player.posY + player.getEyeHeight(), player.posZ, is.getItemDamage() == 0 ? SoundRegistry.fireblue : SoundRegistry.firered, SoundCategory.PLAYERS, 0.3F, 1.0F);
-            world.spawnEntity(new EntityPortalProjectile(world, player, is.getItemDamage() == 1));
+            level.playSound(null, player.getX(), player.getEyeY(), player.getZ(),
+                isOrange ? SoundRegistry.FIRERED.get() : SoundRegistry.FIREBLUE.get(),
+                SoundSource.PLAYERS, 0.3F, 1.0F);
+
+            EntityPortalProjectile proj = new EntityPortalProjectile(level, player, isOrange);
+            level.addFreshEntity(proj);
         }
-        return new ActionResult(EnumActionResult.SUCCESS, player.getHeldItem(handIn));
+        return InteractionResultHolder.success(player.getItemInHand(hand));
     }
 }

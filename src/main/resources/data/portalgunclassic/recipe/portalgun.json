@@ -1,0 +1,18 @@
+{
+    "type": "minecraft:crafting_shaped",
+    "pattern": [
+        "OII",
+        "DCI",
+        "IOI"
+    ],
+    "key": {
+        "O": { "item": "minecraft:obsidian" },
+        "I": { "item": "minecraft:iron_ingot" },
+        "D": { "item": "minecraft:diamond" },
+        "C": { "item": "portalgunclassic:portal_core" }
+    },
+    "result": {
+        "id": "portalgunclassic:portalgun",
+        "count": 1
+    }
+}
