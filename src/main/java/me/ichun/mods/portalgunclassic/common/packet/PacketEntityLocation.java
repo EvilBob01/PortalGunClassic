@@ -63,7 +63,7 @@ public record PacketEntityLocation(
     }
 
     @Override
-    public Type<PacketEntityLocation> getType() { return TYPE; }
+    public Type<PacketEntityLocation> type() { return TYPE; }
 
     public static void handle(PacketEntityLocation packet, IPayloadContext ctx)
     {

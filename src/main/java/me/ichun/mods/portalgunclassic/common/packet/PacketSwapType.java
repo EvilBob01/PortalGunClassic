@@ -14,18 +14,18 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-public record PacketSwapType(boolean reset, int type) implements CustomPacketPayload
+public record PacketSwapType(boolean reset, int portalType) implements CustomPacketPayload
 {
     public static final Type<PacketSwapType> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath("portalgunclassic", "swap_type"));
 
     public static final StreamCodec<ByteBuf, PacketSwapType> STREAM_CODEC = StreamCodec.composite(
         ByteBufCodecs.BOOL, PacketSwapType::reset,
-        ByteBufCodecs.INT,  PacketSwapType::type,
+        ByteBufCodecs.INT,  PacketSwapType::portalType,
         PacketSwapType::new);
 
     @Override
-    public Type<PacketSwapType> getType() { return TYPE; }
+    public Type<PacketSwapType> type() { return TYPE; }
 
     public static void handle(PacketSwapType packet, IPayloadContext ctx)
     {
@@ -51,7 +51,7 @@ public record PacketSwapType(boolean reset, int type) implements CustomPacketPay
                 else
                 {
                     PortalSavedData data = PortalSavedData.getOrCreate(player.level());
-                    if (packet.type() == 0)
+                    if (packet.portalType() == 0)
                 {
                     data.kill(player.level(), false);
                     data.kill(player.level(), true);
