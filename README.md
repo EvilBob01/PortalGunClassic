@@ -1,20 +1,35 @@
 # PortalGunClassic
 
-A classic Portal Gun mod for Minecraft 1.21.1 on NeoForge.
+A multi-color Portal Gun mod for Minecraft 1.21.1 on NeoForge.
 
-Shoot blue and orange portals into walls, floors, and ceilings — step through one and emerge from the other. Classic iChun-style Portal Gun mechanics, ported and modernized for NeoForge 1.21.1.
+Shoot portals into walls, floors, and ceilings — step through one and emerge from the other. Each gun supports two independent portal endpoints (A and B), is dyeable to any of Minecraft's 16 colors, and is fully isolated per player so multiple players on a server never interfere with each other's portals.
 
 ---
 
 ## Features
 
-- **Blue & Orange Portal Guns** — craft and wield both types
-- **Portal Projectiles** — fire portal shots that travel through the air and embed in surfaces
-- **Linked Portals** — step through a portal and teleport to its pair, preserving momentum
-- **HUD Overlay** — shows portal status (active/inactive) for each colour while holding a gun
-- **Key Bindings** — swap gun type (`G`) and reset portals (`R`)
-- **Persistence** — portal positions saved per-dimension across server restarts
+- **Single Portal Gun item** — color stored as NBT, defaults to cyan
+- **Left-click fires portal A, right-click fires portal B** — each gun manages its own linked pair
+- **16 dye colors** — sneak + right-click with a dye in your offhand to recolor
+- **Multiple portal pairs per player** — one independent A↔B pair per color; carry a cyan gun and a red gun and have two active pairs simultaneously
+- **Per-player isolation** — portals are keyed by `(playerUUID, colorIndex, slot)`; different players' portals never interact
+- **Color-tinted rendering** — portal balls, portal blocks, and HUD icons all tinted with the gun's dye color at render time; slot B rendered at 65% brightness to distinguish from slot A
+- **Reset portals** — sneak + right-click with no dye removes both portals for that color
+- **Tooltips** — gun shows current color and control hints in the item tooltip
+- **Persistence** — portal positions saved across server restarts
 - **Multiplayer** — full server-side portal tracking with per-player status sync
+
+---
+
+## Controls
+
+| Action | Result |
+|---|---|
+| Left-click | Fire portal **A** |
+| Right-click | Fire portal **B** |
+| Walk through either portal | Teleport to its pair, momentum preserved |
+| Sneak + Right-click (dye in offhand) | Recolor the gun |
+| Sneak + Right-click (no dye) | Reset both portals for this color |
 
 ---
 
@@ -31,27 +46,21 @@ Shoot blue and orange portals into walls, floors, and ceilings — step through 
 ## Installation
 
 1. Download `PortalGunClassic-1.21.1-1.0.0.jar` from [Releases](https://github.com/EvilBob01/PortalGunClassic/releases)
-2. Drop it into your `mods/` folder
-3. Launch Minecraft with NeoForge 1.21.1
+2. Drop it into your `mods/` folder alongside NeoForge 1.21.1
+3. Launch Minecraft
 
 ---
 
 ## Crafting
 
 ### Portal Core
-Craft from iron ingots and ender pearls (see in-game recipe viewer).
+Crafted from iron ingots and ender pearls — check the in-game recipe viewer for the exact recipe.
 
-### Portal Gun (Blue / Orange)
-Craft from Portal Cores and additional materials (see in-game recipe viewer).
+### Portal Gun
+Crafted from Portal Cores and additional materials — check the in-game recipe viewer.
 
----
-
-## Key Bindings
-
-| Key | Action |
-|---|---|
-| `G` | Swap between Blue and Orange gun |
-| `R` | Reset portals (hold Shift to reset only the gun you're holding) |
+### Recoloring
+Hold the Portal Gun in your main hand, put any dye in your offhand, then **sneak + right-click** to apply the color. One dye is consumed per recolor (unless in Creative mode).
 
 ---
 
@@ -66,7 +75,7 @@ cd PortalGunClassic
 # Output: build/libs/PortalGunClassic-1.21.1-1.0.0.jar
 ```
 
-First build will take 15–20 minutes to download the NeoForge toolchain. Subsequent builds are fast.
+First build downloads the NeoForge toolchain and takes 15–20 minutes. Subsequent builds use the Gradle cache and complete in under a minute.
 
 ---
 
@@ -78,11 +87,16 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 ## License
 
-Licensed under the [GNU Lesser General Public License v3.0](COPYING.LESSER).
+This project is dual-licensed:
+
+- The mod code is licensed under the **GNU Lesser General Public License v3.0** — see [COPYING.LESSER](https://github.com/EvilBob01/PortalGunClassic/blob/master/COPYING.LESSER) for the full text.
+- The GNU General Public License v3.0 is also included as a dependency of the LGPL — see [COPYING](https://github.com/EvilBob01/PortalGunClassic/blob/master/COPYING) for the full text.
+
+In short: you are free to use, modify, and distribute this mod, including in modpacks, provided that any modifications to the mod code itself are released under the same LGPL license.
 
 ---
 
 ## Credits
 
-Original concept and code by [iChun](https://github.com/iChun).  
-NeoForge 1.21.1 port maintained by EvilBob01.
+Original concept and code by [iChun](https://github.com/iChun).
+NeoForge 1.21.1 port and multi-color redesign by EvilBob01.
