@@ -15,6 +15,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.util.FastColor;
 
 import java.util.List;
@@ -31,14 +33,14 @@ public class ItemPortalGun extends Item
 
     public static int getColorIndex(ItemStack stack)
     {
-        if (stack.hasTag() && stack.getTag().contains(NBT_COLOR))
-            return stack.getTag().getInt(NBT_COLOR);
-        return DEFAULT_COLOR;
+        CustomData data = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY);
+        CompoundTag tag = data.copyTag();
+        return tag.contains(NBT_COLOR) ? tag.getInt(NBT_COLOR) : DEFAULT_COLOR;
     }
 
     public static void setColorIndex(ItemStack stack, int colorIndex)
     {
-        stack.getOrCreateTag().putInt(NBT_COLOR, colorIndex & 0xF);
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putInt(NBT_COLOR, colorIndex & 0xF));
     }
 
     public static DyeColor getDyeColor(ItemStack stack)
