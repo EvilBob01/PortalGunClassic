@@ -16,7 +16,11 @@ All notable changes to PortalGunClassic will be documented here.
 - **Reset portals** — sneak + right-click with no dye removes both portals for the held gun's color
 - Tooltip on portal gun shows current color, left/right-click instructions, and dye hint
 
-### Changed
+### Fixed
+- `DyeColor.getTextureDiffuseColors()` (float[]) removed in 1.21.1; replaced with `getTextureDiffuseColor()` (ARGB int) via `FastColor.ARGB32` helpers
+- `ItemStack.hasTag()` / `getTag()` / `getOrCreateTag()` replaced with 1.21.1 Data Components API (`DataComponents.CUSTOM_DATA` + `CustomData.update()`)
+- Missing `CompoundTag` import in `ItemPortalGun`
+
 - `ItemPortalGun` redesigned: `isOrange` boolean removed, replaced by `colorIndex` NBT; single registered item replaces `portalgun` + `portalgun_orange`
 - `EntityPortalProjectile`: carries `ownerUUID`, `colorIndex`, `slot` instead of `isOrange`
 - `PortalInfo`: stores `ownerUUID`, `colorIndex`, `slot` per portal; `makeKey()` / `pairKey()` helpers
