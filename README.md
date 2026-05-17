@@ -99,4 +99,5 @@ In short: you are free to use, modify, and distribute this mod, including in mod
 ## Credits
 
 Original concept and code by [iChun](https://github.com/iChun).
-NeoForge 1.21.1 port and multi-color redesign by EvilBob01.
+NeoForge 1.21.1 port and multi-color redesign by [EvilBob01](https://github.com/EvilBob01).
+API migration, architecture redesign, and build automation assisted by [Claude](https://claude.ai) (Anthropic Claude Sonnet 4.6).
